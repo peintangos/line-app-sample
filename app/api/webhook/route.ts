@@ -8,6 +8,7 @@ import { appendMessage } from "@/lib/storage/memory";
 import { parseSuggestions } from "@/lib/ai/parse-suggestions";
 import { markdownToFlex } from "@/lib/line/flex/markdown-to-flex";
 import { buildQuickReply } from "@/lib/line/flex/quick-reply";
+import { appendLiffButton } from "@/lib/line/flex/liff-button";
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -51,7 +52,7 @@ async function handleEvent(event: webhook.Event): Promise<void> {
   const flexMessage = await markdownToFlex(content, `AI: ${content.slice(0, 60)}`);
 
   const message: messagingApi.Message = flexMessage
-    ? { ...flexMessage, quickReply }
+    ? { ...appendLiffButton(flexMessage), quickReply }
     : { type: "text", text: content, quickReply };
 
   await lineClient.replyMessage({
