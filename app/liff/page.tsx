@@ -9,7 +9,7 @@ import { ChatMessages } from "./components/chat-messages";
 import { ChatInput } from "./components/chat-input";
 
 function ChatApp() {
-  const { idToken, isLoggedIn, error: liffError } = useLiff();
+  const { idToken, isLoggedIn, error: liffError, debugInfo } = useLiff();
 
   const transport = useMemo(() => {
     return new DefaultChatTransport({
@@ -32,8 +32,9 @@ function ChatApp() {
 
   if (!isLoggedIn) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-gray-50">
+      <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-gray-50 p-4">
         <p className="text-gray-400">ログイン中...</p>
+        <p className="text-xs text-gray-300 break-all max-w-sm text-center">{debugInfo}</p>
       </div>
     );
   }

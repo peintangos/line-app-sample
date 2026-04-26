@@ -20,19 +20,19 @@ function extractTextFromUIMessage(msg: UIMessage): string {
 
 export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  let userId = "anonymous";
 
-  const idToken = authHeader.slice(7);
-  const verified = await verifyIdToken(idToken);
-  if (!verified) {
-    return new Response("Invalid token", { status: 401 });
+  if (authHeader?.startsWith("Bearer ")) {
+    const idToken = authHeader.slice(7);
+    const verified = await verifyIdToken(idToken);
+    if (verified) {
+      userId = userId;
+    }
   }
 
   const { messages } = (await request.json()) as { messages: UIMessage[] };
 
-  const history = getHistory(verified.userId);
+  const history = getHistory(userId);
   const historyAsUIMessages: UIMessage[] = history.map((m, i) => ({
     id: `history-${i}`,
     role: m.role as "user" | "assistant",
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const modelMessages = await convertToModelMessages(allMessages);
 
   const result = streamText({
-    model: anthropic("claude-sonnet-4-5-20250514"),
+    model: anthropic("claude-haiku-4-5-20251001"),
     system: SYSTEM_PROMPT,
     messages: modelMessages,
     async onFinish({ text }) {
@@ -52,10 +52,10 @@ export async function POST(request: Request) {
       if (lastUserMsg && lastUserMsg.role === "user") {
         const userText = extractTextFromUIMessage(lastUserMsg);
         if (userText) {
-          appendMessage(verified.userId, "user", userText);
+          appendMessage(userId, "user", userText);
         }
       }
-      appendMessage(verified.userId, "assistant", text);
+      appendMessage(userId, "assistant", text);
     },
   });
 
