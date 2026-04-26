@@ -1,0 +1,63 @@
+import { streamText, convertToModelMessages, UIMessage } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { verifyIdToken } from "@/lib/line/verify-id-token";
+import { getHistory, appendMessage } from "@/lib/storage/memory";
+
+const anthropic = createAnthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+});
+
+const SYSTEM_PROMPT = `あなたはLINE上で動作するAIアシスタントです。
+ユーザーの質問に対して、簡潔で分かりやすい日本語で回答してください。
+Markdownの書式（見出し、リスト、コードブロック、テーブルなど）を積極的に使って構造化された回答をしてください。`;
+
+function extractTextFromUIMessage(msg: UIMessage): string {
+  return msg.parts
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+}
+
+export async function POST(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const idToken = authHeader.slice(7);
+  const verified = await verifyIdToken(idToken);
+  if (!verified) {
+    return new Response("Invalid token", { status: 401 });
+  }
+
+  const { messages } = (await request.json()) as { messages: UIMessage[] };
+
+  const history = getHistory(verified.userId);
+  const historyAsUIMessages: UIMessage[] = history.map((m, i) => ({
+    id: `history-${i}`,
+    role: m.role as "user" | "assistant",
+    parts: [{ type: "text" as const, text: m.content }],
+    createdAt: new Date(),
+  }));
+
+  const allMessages = [...historyAsUIMessages, ...messages];
+  const modelMessages = await convertToModelMessages(allMessages);
+
+  const result = streamText({
+    model: anthropic("claude-sonnet-4-5-20250514"),
+    system: SYSTEM_PROMPT,
+    messages: modelMessages,
+    async onFinish({ text }) {
+      const lastUserMsg = messages[messages.length - 1];
+      if (lastUserMsg && lastUserMsg.role === "user") {
+        const userText = extractTextFromUIMessage(lastUserMsg);
+        if (userText) {
+          appendMessage(verified.userId, "user", userText);
+        }
+      }
+      appendMessage(verified.userId, "assistant", text);
+    },
+  });
+
+  return result.toUIMessageStreamResponse();
+}
